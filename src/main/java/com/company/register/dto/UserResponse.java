@@ -12,7 +12,7 @@ import java.util.UUID;
 @Getter
 @Setter
 @Builder
-public class UserResponseDTO {
+public class UserResponse {
     private UUID id;
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = PatternKeys.DATE_FORMAT)

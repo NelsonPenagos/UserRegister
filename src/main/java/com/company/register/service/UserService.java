@@ -3,15 +3,18 @@ package com.company.register.service;
 import com.company.register.constants.MessageKeys;
 import com.company.register.dto.PhoneDTO;
 import com.company.register.dto.UserDTO;
-import com.company.register.dto.UserResponseDTO;
+import com.company.register.dto.UserResponse;
+import com.company.register.exception.EmailAlreadyRegisteredException;
+import com.company.register.exception.EmailValidationException;
+import com.company.register.exception.PasswordValidationException;
 import com.company.register.model.Phone;
 import com.company.register.model.User;
 import com.company.register.repository.UserRepository;
-import com.company.register.security.JwtTokenGenerator;
-import jakarta.transaction.Transactional;
+import com.company.register.security.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,10 +25,16 @@ import java.util.stream.Collectors;
 public class UserService {
 
     @Autowired
+    private ValidationService validationService;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
     private MessageService msj;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -35,17 +44,27 @@ public class UserService {
     }
 
     @Transactional
-    public UserResponseDTO registerUser(UserDTO userDTO) {
+    public UserResponse registerUser(UserDTO userDTO) {
         validateEmail(userDTO.getEmail());
+        validatePassword(userDTO.getPassword());
         User user = createUserFromDTO(userDTO);
-        user.setToken(generateToken(user.getId()));
+        user.setToken(generateToken(userDTO.getEmail()));
         User savedUser = userRepository.save(user);
         return mapToUserResponseDTO(savedUser);
     }
 
     private void validateEmail(String email) {
+        if (!validationService.isValidEmail(email)) {
+            throw new EmailValidationException(msj.getMessage(MessageKeys.EMAIL_FORMAT_MESSAGE));
+        }
         if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException(msj.getMessage(MessageKeys.REGISTER_SUCCESS));
+            throw new EmailAlreadyRegisteredException(msj.getMessage(MessageKeys.REGISTER_FAIL));
+        }
+    }
+
+    private void validatePassword(String password) {
+        if (!validationService.isValidPassword(password)) {
+            throw new PasswordValidationException(msj.getMessage(MessageKeys.PASSWORD_FORMAT_MESSAGE));
         }
     }
 
@@ -76,12 +95,12 @@ public class UserService {
         }).collect(Collectors.toList());
     }
 
-    private String generateToken(UUID userId) {
-        return JwtTokenGenerator.createJwtToken(userId.toString());
+    private String generateToken(String name) {
+        return jwtUtil.generateToken(name);
     }
 
-    private UserResponseDTO mapToUserResponseDTO(User savedUser) {
-        return UserResponseDTO.builder()
+    private UserResponse mapToUserResponseDTO(User savedUser) {
+        return UserResponse.builder()
                 .id(savedUser.getId())
                 .created(savedUser.getCreated())
                 .modified(savedUser.getModified())
